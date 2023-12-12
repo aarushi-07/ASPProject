@@ -1,119 +1,154 @@
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
-#include <sys/stat.h>
-#include <time.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/sendfile.h>
+#include <zlib.h>
 
-#define PORT 12345
-#define FILE_DIRECTORY "/home/janvip/Desktop"
+#define BUFFER_SIZE 1024
 
-void send_file_info(int clientSocket, const char* filename) {
-    char path[256];
-    sprintf(path, "%s/%s", FILE_DIRECTORY, filename);
-
-    // Print the constructed file path for debugging
-    printf("Constructed file path: %s\n", path);
-
+void compressAndSendFiles(int client_socket, const char *directory, off_t size1, off_t size2) {
+    DIR *dir;
+    struct dirent *entry;
     struct stat file_stat;
-    if (stat(path, &file_stat) == 0) {
-        char info[1024];
-        // Remove newline character from ctime result
-        char* modifiedTime = ctime(&file_stat.st_mtime);
-        modifiedTime[strcspn(modifiedTime, "\n")] = '\0';
-
-        snprintf(info, sizeof(info), "File: %s\nSize: %ld bytes\nLast modified: %s\nPermissions: %o",
-                 filename, file_stat.st_size, modifiedTime, file_stat.st_mode & 0777);
-
-        send(clientSocket, info, strlen(info) + 1, 0);
-    } else {
-        // Print an error message for debugging
-        perror("Error getting file information");
-        send(clientSocket, "File not found", sizeof("File not found"), 0);
+    char filepath[PATH_MAX];
+    char buffer[BUFFER_SIZE];
+    gzFile archive;
+    
+    archive = gzopen("temp.tar.gz", "w");
+    if (!archive) {
+        perror("Failed to create archive");
+        exit(EXIT_FAILURE);
     }
+
+    if ((dir = opendir(directory)) == NULL) {
+        perror("Error opening directory");
+        exit(EXIT_FAILURE);
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        snprintf(filepath, sizeof(filepath), "%s/%s", directory, entry->d_name);
+        
+        if (stat(filepath, &file_stat) == 0 && S_ISREG(file_stat.st_mode)) {
+            off_t file_size = file_stat.st_size;
+            if (file_size >= size1 && file_size <= size2) {
+                int file_fd = open(filepath, O_RDONLY);
+                ssize_t bytes_read;
+
+                gzprintf(archive, "%s\n", entry->d_name);
+
+                while ((bytes_read = read(file_fd, buffer, sizeof(buffer))) > 0) {
+                    gzwrite(archive, buffer, bytes_read);
+                }
+
+                close(file_fd);
+            }
+        }
+    }
+
+    closedir(dir);
+    gzclose(archive);
+
+    // Send the compressed archive to the client
+    int archive_fd = open("temp.tar.gz", O_RDONLY);
+    off_t archive_size = lseek(archive_fd, 0, SEEK_END);
+    lseek(archive_fd, 0, SEEK_SET);
+
+    sendfile(client_socket, archive_fd, NULL, archive_size);
+
+    close(archive_fd);
+    remove("temp.tar.gz");
 }
 
 void pclientrequest(int clientSocket) {
-    char command[1024];
+    char buffer[255];
+    int bytesRead;
 
-    while (1) {
+    for (;;) {
         // Receive command from the client
-        if (recv(clientSocket, command, sizeof(command), 0) <= 0) {
+        bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (bytesRead <= 0) {
+            // Handle client disconnection or error
             break;
         }
+	
+	// Process the command (you need to implement the logic)
+        // For example, you can print the received command
+        printf("Received command from client: %s\n", buffer);
 
-        // Print the received command for debugging
-        printf("Received command: %s\n", command);
 
-        // Process the command and perform required actions
-        if (strncmp(command, "getfn", 5) == 0) {
-            // Extract filename from the command
-            char filename[256];
-            sscanf(command, "getfn %s", filename);
-
-            // Send file information to the client
-            send_file_info(clientSocket, filename);
+	if (strncmp(buffer, "getfz", 5) == 0) {
+	int size1, size2;
+		const char *home_directory = getenv("HOME");
+    if (home_directory == NULL) {
+        perror("Unable to determine home directory");
+        exit(EXIT_FAILURE);
+    }
+    sscanf(buffer, "%*s %d %d", &size1, &size2);
+    compressAndSendFiles(clientSocket, home_directory, size1, size2);
+    
+	}
+	
+	// Check if the received command is "quitc"
+        else if (strcmp(buffer, "quitc") == 0) {
+            // If the command is "quitc", exit the loop and close the connection
+            break;
         }
-        // Add other command processing logic here
+        
+        // Send the result back to the client (you need to implement the logic)
+        // For example, you can send a response message
+        const char* responseMsg = "Command processed successfully";
+        send(clientSocket, responseMsg, strlen(responseMsg), 0);
+
+        
     }
 
     // Close the client socket
     close(clientSocket);
 }
 
-int main() {
-    int serverSocket, clientSocket;
-    struct sockaddr_in serverAddr, clientAddr;
-    socklen_t addrLen = sizeof(clientAddr);
+int main(int argc, char const* argv[]) {
+    // Create server socket
+    int servSockD = socket(AF_INET, SOCK_STREAM, 0);
 
-    // Create socket
-    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == -1) {
-        perror("Error creating socket");
-        exit(EXIT_FAILURE);
-    }
+    // Define server address
+    struct sockaddr_in servAddr;
 
-    // Configure server address
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(PORT);
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(9001);
+    servAddr.sin_addr.s_addr = INADDR_ANY;
 
-    // Bind the socket
-    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("Error binding");
-        close(serverSocket);
-        exit(EXIT_FAILURE);
-    }
+    // Bind socket to the specified IP and port
+    bind(servSockD, (struct sockaddr*)&servAddr, sizeof(servAddr));
 
-    // Listen for incoming connections
-    if (listen(serverSocket, 5) == -1) {
-        perror("Error listening");
-        close(serverSocket);
-        exit(EXIT_FAILURE);
-    }
+    // Listen for connections
+    // Increased the backlog to 5 to allow multiple clients
+    listen(servSockD, 5);  
 
-    while (1) {
-        // Accept a client connection
-        clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &addrLen);
-        if (clientSocket == -1) {
-            perror("Error accepting connection");
-            continue;
-        }
+    // Infinite loop for handling client connections
+    for (;;) {
+        // Accept a new connection
+        int clientSocket = accept(servSockD, NULL, NULL);
 
-        // Fork a process to handle the client request
-        if (fork() == 0) {
-            close(serverSocket); // Child process doesn't need the listening socket
+        // Fork a new process to handle the client request
+        pid_t childPid = fork();
+
+        if (childPid == 0) {
+            // In child process
+            close(servSockD);  // Close the server socket in the child process
             pclientrequest(clientSocket);
-            close(clientSocket);
-            exit(EXIT_SUCCESS);
+            exit(0);  // Exit the child process after handling the client request
         } else {
-            close(clientSocket); // Parent process doesn't need the client socket
+            // In parent process
+            close(clientSocket);  // Close the client socket in the parent process
         }
     }
 
-    close(serverSocket);
     return 0;
 }
-
