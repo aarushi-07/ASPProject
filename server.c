@@ -12,6 +12,33 @@
 #include <zlib.h>
 
 #define BUFFER_SIZE 1024
+#define PORT 12345
+#define FILE_DIRECTORY "/home/janvip/Desktop"
+
+void send_file_info(int clientSocket, const char* filename) {
+    char path[256];
+    sprintf(path, "%s/%s", FILE_DIRECTORY, filename);
+
+    // Print the constructed file path for debugging
+    printf("Constructed file path: %s\n", path);
+
+    struct stat file_stat;
+    if (stat(path, &file_stat) == 0) {
+        char info[1024];
+        // Remove newline character from ctime result
+        char* modifiedTime = ctime(&file_stat.st_mtime);
+        modifiedTime[strcspn(modifiedTime, "\n")] = '\0';
+
+        snprintf(info, sizeof(info), "File: %s\nSize: %ld bytes\nLast modified: %s\nPermissions: %o",
+                 filename, file_stat.st_size, modifiedTime, file_stat.st_mode & 0777);
+
+        send(clientSocket, info, strlen(info) + 1, 0);
+    } else {
+        // Print an error message for debugging
+        perror("Error getting file information");
+        send(clientSocket, "File not found", sizeof("File not found"), 0);
+    }
+}
 
 void compressAndSendFiles(int client_socket, const char *directory, off_t size1, off_t size2) {
     DIR *dir;
@@ -82,8 +109,16 @@ void pclientrequest(int clientSocket) {
         // For example, you can print the received command
         printf("Received command from client: %s\n", buffer);
 
+	if (strncmp(buffer, "getfn", 5) == 0) {
+            // Extract filename from the command
+            char filename[256];
+            sscanf(buffer, "getfn %s", filename);
 
-	if (strncmp(buffer, "getfz", 5) == 0) {
+            // Send file information to the client
+            send_file_info(clientSocket, filename);
+        }
+
+	else if (strncmp(buffer, "getfz", 5) == 0) {
 	int size1, size2;
 		const char *home_directory = getenv("HOME");
     if (home_directory == NULL) {
@@ -121,7 +156,7 @@ int main(int argc, char const* argv[]) {
     struct sockaddr_in servAddr;
 
     servAddr.sin_family = AF_INET;
-    servAddr.sin_port = htons(9001);
+    servAddr.sin_port = htons(PORT);
     servAddr.sin_addr.s_addr = INADDR_ANY;
 
     // Bind socket to the specified IP and port
