@@ -76,7 +76,7 @@ if (sockD == -1) {
    		}
    		
    		else{
-   		printf("Filename:: %s", filename);
+   		printf("Filename:: %s\n", filename);
    		send(sockD, userInput, strlen(userInput), 0);
 		
 		// Receive and print the server's response
@@ -88,7 +88,7 @@ if (sockD == -1) {
 
         printf("Server response: %s\n", response);
    		}
-   		
+   		continue;
             } else if (strncmp(userInput, "getfz", 5) == 0) {
                 int count = 0;
    		 int offset = 0;
