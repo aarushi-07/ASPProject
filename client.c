@@ -71,6 +71,15 @@ int main(int argc, char const* argv[]) {
    		else{
    		printf("Filename:: %s", filename);
    		send(sockD, userInput, strlen(userInput), 0);
+		
+		// Receive and print the server's response
+        char response[1024];
+        memset(response, 0, sizeof(response));
+
+        recv(sockD, response, sizeof(response) - 1, 0);
+        response[sizeof(response) - 1] = '\0';
+
+        printf("Server response: %s\n", response);
    		}
    		
             } else if (strncmp(userInput, "getfz", 5) == 0) {
