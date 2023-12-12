@@ -1,0 +1,60 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
+#define PORT 12345
+
+int main() {
+    int clientSocket;
+    struct sockaddr_in serverAddr;
+
+    // Create socket
+    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket == -1) {
+        perror("Error creating socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Configure server address
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Change this to the server's IP address
+    serverAddr.sin_port = htons(PORT);
+
+    // Connect to the server
+    if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+        perror("Error connecting to server");
+        close(clientSocket);
+        exit(EXIT_FAILURE);
+    }
+
+    while (1) {
+        // User input example: "getfn sample.txt"
+        char command[1024];
+        printf("Enter filename: ");
+        fgets(command, sizeof(command), stdin);
+
+        // Remove trailing newline character
+        command[strcspn(command, "\n")] = '\0';
+
+        // Send the command to the server
+        send(clientSocket, command, strlen(command) + 1, 0);
+
+        // Receive and print the server's response
+        char response[1024];
+        memset(response, 0, sizeof(response));
+
+        recv(clientSocket, response, sizeof(response) - 1, 0);
+        response[sizeof(response) - 1] = '\0';
+
+        printf("Server response: %s\n", response);
+    }
+
+    // The code will never reach here in an infinite loop, but you can add cleanup code if needed.
+    close(clientSocket);
+
+    return 0;
+}
+
