@@ -27,18 +27,25 @@ void saveIntolocal(int server_socket) {
 }
 
 int main(int argc, char const* argv[]) {
-    int sockD = socket(AF_INET, SOCK_STREAM, 1);
+    int sockD = socket(AF_INET, SOCK_STREAM, 0);
+    
+if (sockD == -1) {
+    perror("Error creating socket");
+    exit(EXIT_FAILURE);
+}
 
     struct sockaddr_in servAddr;
 
     servAddr.sin_family = AF_INET;
-    servAddr.sin_port = htons(9001);
+    servAddr.sin_port = htons(9002);
     servAddr.sin_addr.s_addr = INADDR_ANY;
 
     int connectStatus = connect(sockD, (struct sockaddr*)&servAddr, sizeof(servAddr));
+    
 
     if (connectStatus == -1) {
-        printf("Error while connecting to the server\n");
+        //printf("Error while connecting to the server\n");
+        perror("Error while connecting to the server");
     } else {
         char strData[BUFFER_SIZE];
 
