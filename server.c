@@ -14,8 +14,8 @@
 #include <time.h>
 
 #define BUFFER_SIZE 1024
-#define PORT 12345
-#define FILE_DIRECTORY "/home/janvip/Desktop"
+#define PORT 9001
+#define FILE_DIRECTORY "/home/vboxuser/Desktop/COMP8567/"
 
 void send_file_info(int clientSocket, const char* filename) {
     char path[256];
@@ -152,13 +152,13 @@ void pclientrequest(int clientSocket) {
 
 int main(int argc, char const* argv[]) {
     // Create server socket
-    int servSockD = socket(AF_INET, SOCK_STREAM, 0);
+        int servSockD = socket(AF_INET, SOCK_STREAM, 0);
 
     // Define server address
     struct sockaddr_in servAddr;
 
     servAddr.sin_family = AF_INET;
-    servAddr.sin_port = htons(PORT);
+    servAddr.sin_port = htons(9002);
     servAddr.sin_addr.s_addr = INADDR_ANY;
 
     // Bind socket to the specified IP and port
@@ -167,12 +167,14 @@ int main(int argc, char const* argv[]) {
     // Listen for connections
     // Increased the backlog to 5 to allow multiple clients
     listen(servSockD, 5);  
+    printf("Listening for clients\n");
 
     // Infinite loop for handling client connections
     for (;;) {
+    printf("Inside for\n");
         // Accept a new connection
         int clientSocket = accept(servSockD, NULL, NULL);
-
+printf("after clientSocket");
         // Fork a new process to handle the client request
         pid_t childPid = fork();
 
