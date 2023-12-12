@@ -9,7 +9,9 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/sendfile.h>
+#include <sys/stat.h>
 #include <zlib.h>
+#include <time.h>
 
 #define BUFFER_SIZE 1024
 #define PORT 12345
@@ -41,7 +43,7 @@ void send_file_info(int clientSocket, const char* filename) {
 }
 
 void compressAndSendFiles(int client_socket, const char *directory, off_t size1, off_t size2) {
-    DIR *dir;
+   /* DIR *dir;
     struct dirent *entry;
     struct stat file_stat;
     char filepath[PATH_MAX];
@@ -90,7 +92,7 @@ void compressAndSendFiles(int client_socket, const char *directory, off_t size1,
     sendfile(client_socket, archive_fd, NULL, archive_size);
 
     close(archive_fd);
-    remove("temp.tar.gz");
+    remove("temp.tar.gz");*/
 }
 
 void pclientrequest(int clientSocket) {
