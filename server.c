@@ -15,7 +15,7 @@
 
 #define BUFFER_SIZE 1024
 #define PORT 9001
-#define FILE_DIRECTORY "/home/vboxuser/Desktop/COMP8567/"
+#define FILE_DIRECTORY "/home/janvip/Desktop"
 
 void send_file_info(int clientSocket, const char* filename) {
     char path[256];
@@ -41,6 +41,150 @@ void send_file_info(int clientSocket, const char* filename) {
         send(clientSocket, "File not found", sizeof("File not found"), 0);
     }
 }
+
+void create_and_send_tar(int client_socket, const char *extensions[], int num_extensions) {
+    // Get the home directory dynamically
+    const char *home_dir = getenv("HOME");
+    if (home_dir == NULL) {
+        // Handle the case where the HOME environment variable is not set
+        fprintf(stderr, "Error getting home directory.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    const char *tar_filename = "result.tar";
+
+    // Build the tar command with find to include all specified file extensions and exclude hidden directories
+    char tar_command[512];
+    snprintf(tar_command, sizeof(tar_command), "find %s -type f \\( -not -path '%s/.cache/*' \\) -a \\( -not -path '%s/.local/*' \\)", home_dir, home_dir, home_dir);
+
+    for (int i = 0; i < num_extensions; ++i) {
+        if (i == 0) {
+            snprintf(tar_command + strlen(tar_command), sizeof(tar_command) - strlen(tar_command), " \\( ");
+        } else {
+            snprintf(tar_command + strlen(tar_command), sizeof(tar_command) - strlen(tar_command), " -o ");
+        }
+        snprintf(tar_command + strlen(tar_command), sizeof(tar_command) - strlen(tar_command), "-name '*.%s'", extensions[i]);
+        if (i == num_extensions - 1) {
+            snprintf(tar_command + strlen(tar_command), sizeof(tar_command) - strlen(tar_command), " \\)");
+        }
+    }
+
+    snprintf(tar_command + strlen(tar_command), sizeof(tar_command) - strlen(tar_command), " -print0 | tar --null -T - -rf %s -C %s", tar_filename, home_dir);
+
+    // Execute the tar command
+    int result = system(tar_command);
+
+    if (result == 0) {
+        printf("Tar file created successfully.\n");
+
+        // Compress the tar file using gzip
+        char gzip_command[256];
+        snprintf(gzip_command, sizeof(gzip_command), "gzip %s", tar_filename);
+
+        result = system(gzip_command);
+
+        if (result == 0) {
+            printf("Tar file compressed successfully.\n");
+        } else {
+            fprintf(stderr, "Error compressing tar file.\n");
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        fprintf(stderr, "Error creating tar file.\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*void send_filtered_files(int client_socket, const char* extensions[], int num_extensions) {
+    DIR* dir;
+    struct dirent* entry;
+    char filepath[PATH_MAX];
+    char buffer[BUFFER_SIZE];
+    gzFile archive;
+
+    archive = gzopen("temp.tar.gz", "wb");
+    if (!archive) {
+        perror("Failed to create archive");
+        exit(EXIT_FAILURE);
+    }
+
+    if ((dir = opendir(FILE_DIRECTORY)) == NULL) {
+        perror("Error opening directory");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Searching files with extensions: ");
+    for (int i = 0; i < num_extensions; ++i) {
+        printf("%s ", extensions[i]);
+    }
+    printf("\n");
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_REG) {  // Check if it's a regular file
+            printf("Checking file: %s\n", entry->d_name);
+
+            // Check if the file has one of the specified extensions
+            for (int i = 0; i < num_extensions; ++i) {
+                if (strstr(entry->d_name, extensions[i]) != NULL) {
+                    snprintf(filepath, sizeof(filepath), "%s/%s", FILE_DIRECTORY, entry->d_name);
+
+                    printf("Adding file to archive: %s\n", entry->d_name);
+
+                    int file_fd = open(filepath, O_RDONLY);
+                    if (file_fd == -1) {
+                        perror("Error opening file");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    ssize_t bytes_read;
+
+                    gzprintf(archive, "%s\n", entry->d_name);
+
+                    while ((bytes_read = read(file_fd, buffer, sizeof(buffer))) > 0) {
+                        gzwrite(archive, buffer, bytes_read);
+                    }
+
+                    if (bytes_read == -1) {
+                        perror("Error reading file");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    close(file_fd);
+                    break;  // Break the loop after processing the file
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+    int gzclose_status = gzclose(archive);
+    if (gzclose_status != Z_OK) {
+        fprintf(stderr, "Error closing archive: %s\n", gzerror(archive, NULL));
+        exit(EXIT_FAILURE);
+    }
+
+    // Send the compressed archive to the client
+    int archive_fd = open("temp.tar.gz", O_RDONLY);
+    if (archive_fd == -1) {
+        perror("Error opening compressed archive");
+        exit(EXIT_FAILURE);
+    }
+
+    off_t archive_size = lseek(archive_fd, 0, SEEK_END);
+    lseek(archive_fd, 0, SEEK_SET);
+
+    sendfile(client_socket, archive_fd, NULL, archive_size);
+
+    if (close(archive_fd) == -1) {
+        perror("Error closing compressed archive file descriptor");
+        exit(EXIT_FAILURE);
+    }
+
+    if (remove("temp.tar.gz") == -1) {
+        perror("Error removing temporary archive file");
+        exit(EXIT_FAILURE);
+    }
+}*/
 
 void compressAndSendFiles(int client_socket, const char *directory, off_t size1, off_t size2) {
    /* DIR *dir;
@@ -94,7 +238,6 @@ void compressAndSendFiles(int client_socket, const char *directory, off_t size1,
     close(archive_fd);
     remove("temp.tar.gz");*/
 }
-
 void pclientrequest(int clientSocket) {
     char buffer[255];
     int bytesRead;
@@ -131,6 +274,37 @@ void pclientrequest(int clientSocket) {
     compressAndSendFiles(clientSocket, home_directory, size1, size2);
     
 	}
+    else if (strncmp(buffer, "getft", 5) == 0) {
+    int count = 0;
+    int offset = 0;
+    char attribute[255];
+    const char* extensions[3];  // Assuming a maximum of 3 extensions
+
+    while (sscanf(buffer + offset, "%s", attribute) == 1) {
+        count++;
+        offset += strlen(attribute) + 1;
+    }
+
+    if (count < 2 || count > 4) {
+        printf("Syntax is incorrect, usage:: getft ext1 ext2 ext3 (max of 3 allowed)\n");
+    } else {
+        const char* tempExtensions[3];
+        const char* tempBuffer = buffer + 5;  // Skip "getft" in the command
+
+        for (int i = 0; i < count - 1; ++i) {
+            sscanf(tempBuffer, "%s", attribute);
+            tempExtensions[i] = attribute;
+            tempBuffer += strlen(attribute) + 1;
+        }
+
+        create_and_send_tar(clientSocket, tempExtensions, count - 1);
+    }
+}
+
+
+
+
+
 	
 	// Check if the received command is "quitc"
         else if (strcmp(buffer, "quitc") == 0) {
