@@ -5,8 +5,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-//#include <dirent.h>
-//#include <fcntl.h>
+#include <dirent.h>
+#include <libgen.h>
+#include <fcntl.h>
 #include <limits.h>
 //#include <sys/sendfile.h>
 #include <sys/stat.h>
@@ -16,31 +17,59 @@
 
 #define BUFFER_SIZE 1024
 #define PORT 9001
-#define FILE_DIRECTORY "/home/janvip/Desktop"
 
-void send_file_info(int clientSocket, const char* filename) {
-    char path[256];
-    sprintf(path, "%s/%s", FILE_DIRECTORY, filename);
+void send_file_info(int clientSocket, const char *filename) {
+    // Perform a recursive file search starting from the root directory ("/")
+    char path[PATH_MAX];
+    if (recursive_search("/", filename, path)) {
+        // File found, send information to the client
+        struct stat file_stat;
+        if (stat(path, &file_stat) == 0) {
+            char info[1024];
+            int info_length = snprintf(info, sizeof(info),
+                "File name: %s\nSize: %ld bytes\nLast modified: %s\nPermissions: %o",
+                basename(path), file_stat.st_size, ctime(&file_stat.st_mtime), file_stat.st_mode & 0777);
 
-    // Print the constructed file path for debugging
-    printf("Constructed file path: %s\n", path);
-
-    struct stat file_stat;
-    if (stat(path, &file_stat) == 0) {
-        char info[1024];
-        // Remove newline character from ctime result
-        char* modifiedTime = ctime(&file_stat.st_mtime);
-        modifiedTime[strcspn(modifiedTime, "\n")] = '\0';
-
-        snprintf(info, sizeof(info), "File: %s\nSize: %ld bytes\nLast modified: %s\nPermissions: %o",
-                 filename, file_stat.st_size, modifiedTime, file_stat.st_mode & 0777);
-
-        send(clientSocket, info, strlen(info) + 1, 0);
+            ssize_t bytes_sent = send(clientSocket, info, info_length, 0);
+            if (bytes_sent == -1) {
+                perror("Error sending file information");
+            }
+        }
     } else {
-        // Print an error message for debugging
-        perror("Error getting file information");
-        send(clientSocket, "File not found", sizeof("File not found"), 0);
+        // File not found, send an appropriate message to the client
+        ssize_t bytes_sent = send(clientSocket, "File not found", sizeof("File not found"), 0);
+        if (bytes_sent == -1) {
+            perror("Error sending 'File not found' message");
+        }
     }
+}
+
+int recursive_search(const char *current_path, const char *filename, char *result_path) {
+    DIR *dir = opendir(current_path);
+    if (!dir) {
+        return 0; // Unable to open directory
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            // Recursive call for subdirectories
+            char next_path[PATH_MAX];
+            snprintf(next_path, sizeof(next_path), "%s/%s", current_path, entry->d_name);
+            if (recursive_search(next_path, filename, result_path)) {
+                closedir(dir);
+                return 1; // File found in a subdirectory
+            }
+        } else if (entry->d_type == DT_REG && strcmp(entry->d_name, filename) == 0) {
+            // File found
+            snprintf(result_path, PATH_MAX, "%s/%s", current_path, entry->d_name);
+            closedir(dir);
+            return 1;
+        }
+    }
+
+    closedir(dir);
+    return 0; // File not found in this directory
 }
 
 void check_bytes_and_send(int client_socket, int size1, int size2){
