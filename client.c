@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 1024
+ 
 
 void saveIntolocal(int server_socket) {
     FILE *received_file = fopen("temp.tar.gz", "wb");
