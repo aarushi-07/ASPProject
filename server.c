@@ -43,6 +43,28 @@ void send_file_info(int clientSocket, const char* filename) {
     }
 }
 
+void check_bytes_and_send(int client_socket, int size1, int size2){
+    // Specify the output file
+    const char *output_file = "received.tar.gz";
+    const char *file_list = "/tmp/files_list.txt";
+
+    // Construct the command to execute
+    char command[512];
+    snprintf(command, sizeof(command), "find ~ -type f -size +%dc -size -%dc -not -path '*/.cache/*' -not -path '*/.local/*' -not -path '*/.thunderbird/*' -not -path '*/.gnupg/*' -not -path '*/.config/*' > %s && tar -czf %s --files-from=%s && rm %s",
+             size1, size2, file_list, output_file, file_list, file_list);
+
+    // Execute the command
+    int result = system(command);
+
+    if (result == 0) {
+        printf("Command executed successfully.\n");
+    } else {
+        fprintf(stderr, "Command failed.\n");
+    }
+
+   
+}
+
 void create_and_send_tar(int client_socket, const char *extensions[], int num_extensions) {
     // Get the home directory dynamically
     const char *home_dir = getenv("HOME");
@@ -174,13 +196,8 @@ void pclientrequest(int clientSocket) {
 
 	else if (strncmp(buffer, "getfz", 5) == 0) {
 	int size1, size2;
-		const char *home_directory = getenv("HOME");
-    if (home_directory == NULL) {
-        perror("Unable to determine home directory");
-        exit(EXIT_FAILURE);
-    }
     sscanf(buffer, "%*s %d %d", &size1, &size2);
-    compressAndSendFiles(clientSocket, home_directory, size1, size2);
+    check_bytes_and_send(clientSocket, size1, size2);
     
 	}
     else if (strncmp(buffer, "getft", 5) == 0) {
