@@ -13,6 +13,7 @@
 //#include <zlib.h>
 #include <time.h>
 
+
 #define BUFFER_SIZE 1024
 #define PORT 9001
 #define FILE_DIRECTORY "/home/janvip/Desktop"
@@ -196,11 +197,15 @@ void pclientrequest(int clientSocket) {
         const char* tempExtensions[3];
         const char* tempBuffer = buffer + 5;  // Skip "getft" in the command
 
-        for (int i = 0; i < count - 1; ++i) {
-            sscanf(tempBuffer, "%s", attribute);
-            tempExtensions[i] = attribute;
-            tempBuffer += strlen(attribute) + 1;
-        }
+        // After the loop that populates tempExtensions array
+for (int i = 0; i < count - 1 && sscanf(tempBuffer, "%s", attribute) == 1; ++i) {
+    tempExtensions[i] = strdup(attribute);
+    printf("tempExtensions[%d]: %s\n", i, tempExtensions[i]);
+    tempBuffer += strlen(attribute) + 1;
+}
+
+
+        
 
         create_and_send_tar(clientSocket, tempExtensions, count - 1);
     
