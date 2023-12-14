@@ -140,6 +140,7 @@ if (sockD == -1) {
             } else if (strncmp(userInput, "getfdb", 6) == 0) {
                 int day, month, year;
   		if (sscanf(userInput, "%*s %d-%d-%d", &year, &month, &day) == 3) {
+			printf("Date Extracted:: %d-%d-%d\n", year, month, day);
       			  // Check the range of year, month, and day
         		if (year >= 1000 && year <= 9999 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
         		 printf("UserInput:: %s\n", userInput);
@@ -156,8 +157,9 @@ if (sockD == -1) {
             } else if (strncmp(userInput, "getfda", 6) == 0) {
                 int year, month, day;
   		if (sscanf(userInput, "%*s %d-%d-%d", &year, &month, &day) == 3) {
+			printf("Date Extracted:: %d-%d-%d\n", year, month, day);
       			  // Check the range of year, month, and day
-        		if (year >= 1000 && year <= 9999 && month >= 1 && month <= 12 && day >= 2 && day <= 31) {
+        		if (year >= 1000 && year <= 9999 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
         		 printf("UserInput:: %s\n", userInput);
         		 send(sockD, userInput, strlen(userInput), 0);
        			 }
