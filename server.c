@@ -123,7 +123,7 @@ void create_and_send_tar(int client_socket, const char *extensions[], int num_ex
 
     snprintf(tar_command + strlen(tar_command), sizeof(tar_command) - strlen(tar_command), " -print0 | tar --null -T - -rf %s -C %s", tar_filename, home_dir);
 
-    // Execute the tar command
+    //Executing the tar command
     int result = system(tar_command);
 
     if (result == 0) {
@@ -147,6 +147,37 @@ void create_and_send_tar(int client_socket, const char *extensions[], int num_ex
     }
 }
 
+void files_before_date(int client_socket, const char *target_date){
+
+    const char *tar_filename = "output.tar.gz";
+    
+    char tar_command[1024];
+    snprintf(tar_command, sizeof(tar_command),
+             "find ~ -type f -not -path '*/.cache/*' -not -path '*/.local/*' -not -path '*/.thunderbird/*' -not -path '*/.gnupg/*' -not -path '*/.config/*' -not -name '%s' ! -newermt %s -print0 | tar --null -T - -czf %s",
+             tar_filename, target_date, tar_filename);
+
+    int result = system(tar_command);
+
+    if (result == 0) {
+        printf("Tar file created successfully.\n");
+        
+        //Compressing into .gz 
+        char gzip_command[256];
+        snprintf(gzip_command, sizeof(gzip_command), "gzip %s", tar_filename);
+
+        result = system(gzip_command);
+
+        if (result == 0) {
+            printf("Tar file compressed successfully.\n");
+        } else {
+            fprintf(stderr, "Error compressing tar file.\n");
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        fprintf(stderr, "Error compressing tar file.\n");
+    }
+}
+
 void files_after_date(int client_socket, const char *target_date){
     const char *tar_filename = "output.tar.gz";
     char tar_command[1024];
@@ -160,7 +191,7 @@ void files_after_date(int client_socket, const char *target_date){
     if (result == 0) {
         printf("Tar creation successful\n");
         
-        // Compress the tar file using gzip
+        //Compressing into .gz
         char gzip_command[256];
         snprintf(gzip_command, sizeof(gzip_command), "gzip %s", tar_filename);
 
@@ -183,14 +214,14 @@ void pclientrequest(int clientSocket) {
     int bytesRead;
 
     for (;;) {
-        // Receive command from the client
+        //Receiving command from client
         bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
         if (bytesRead <= 0) {
-            // Handle client disconnection or error
+            printf("Error while reading bytes from the data client sent");
             break;
         }
 	
-	printf("Received command from client: %s\n", buffer);
+	printf("Command from client:: %s\n", buffer);
 
 	if (strncmp(buffer, "getfn", 5) == 0) {
             // Extract filename from the command
@@ -207,6 +238,7 @@ void pclientrequest(int clientSocket) {
     check_bytes_and_send(clientSocket, size1, size2);
     
 	}
+	
     else if (strncmp(buffer, "getft", 5) == 0) {
     int count = 0;
     int offset = 0;
@@ -232,6 +264,13 @@ for (int i = 0; i < count - 1 && sscanf(tempBuffer, "%s", attribute) == 1; ++i) 
     
 }
 
+	else if (strncmp(buffer, "getfdb", 6) == 0) {
+		char user_date[20];
+		sscanf(buffer, "%*s %s", user_date);
+		files_before_date(clientSocket, user_date);
+		
+	}
+
 	else if (strncmp(buffer, "getfda", 6) == 0) {
 		char user_date[20];
 		sscanf(buffer, "%*s %s", user_date);
@@ -239,14 +278,11 @@ for (int i = 0; i < count - 1 && sscanf(tempBuffer, "%s", attribute) == 1; ++i) 
 		
 	}
 
-	// Check if the received command is "quitc"
-        else if (strcmp(buffer, "quitc") == 0) {
-            // If the command is "quitc", exit the loop and close the connection
+	else if (strcmp(buffer, "quitc") == 0) {
             break;
         }
         
         // Send the result back to the client (you need to implement the logic)
-        // For example, you can send a response message
         const char* responseMsg = "Command processed successfully";
         send(clientSocket, responseMsg, strlen(responseMsg), 0);
 
@@ -258,41 +294,40 @@ for (int i = 0; i < count - 1 && sscanf(tempBuffer, "%s", attribute) == 1; ++i) 
 }
 
 int main(int argc, char const* argv[]) {
-    // Create server socket
+    //Creating server socket
         int servSockD = socket(AF_INET, SOCK_STREAM, 0);
 
-    // Define server address
+    //Defining address for server
     struct sockaddr_in servAddr;
 
     servAddr.sin_family = AF_INET;
     servAddr.sin_port = htons(9002);
     servAddr.sin_addr.s_addr = INADDR_ANY;
 
-    // Bind socket to the specified IP and port
+    //Binding socket to the port and IP 
     bind(servSockD, (struct sockaddr*)&servAddr, sizeof(servAddr));
 
-    // Listen for connections
-    // Increased the backlog to 5 to allow multiple clients
+    //Listening for connections
     listen(servSockD, 5);  
     printf("Listening for clients\n");
 
-    // Infinite loop for handling client connections
+    //Infinite loop
     for (;;) {
     printf("Inside for\n");
-        // Accept a new connection
+        //Accepting new connection
         int clientSocket = accept(servSockD, NULL, NULL);
-printf("after clientSocket");
-        // Fork a new process to handle the client request
+	//printf("after clientSocket");
+        //Forking a new process to handle the client request
         pid_t childPid = fork();
 
         if (childPid == 0) {
-            // In child process
-            close(servSockD);  // Close the server socket in the child process
+            //Inside child process
+            close(servSockD);
             pclientrequest(clientSocket);
-            exit(0);  // Exit the child process after handling the client request
+            exit(0); 
         } else {
             // In parent process
-            close(clientSocket);  // Close the client socket in the parent process
+            close(clientSocket);
         }
     }
 
