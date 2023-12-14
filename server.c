@@ -127,7 +127,7 @@ void create_and_send_tar(int client_socket, const char *extensions[], int num_ex
     int result = system(tar_command);
 
     if (result == 0) {
-        printf("Tar file created successfully.\n");
+        printf("Tar creation successful\n");
 
         // Compress the tar file using gzip
         char gzip_command[256];
@@ -142,64 +142,42 @@ void create_and_send_tar(int client_socket, const char *extensions[], int num_ex
             exit(EXIT_FAILURE);
         }
     } else {
-        fprintf(stderr, "Error creating tar file.\n");
+        fprintf(stderr, "Error while creating tar file. Kindly check again\n");
         exit(EXIT_FAILURE);
     }
 }
 
-
-void compressAndSendFiles(int client_socket, const char *directory, off_t size1, off_t size2) {
-   /* DIR *dir;
-    struct dirent *entry;
-    struct stat file_stat;
-    char filepath[PATH_MAX];
-    char buffer[BUFFER_SIZE];
-    gzFile archive;
+void files_after_date(int client_socket, const char *target_date){
+    const char *tar_filename = "output.tar.gz";
+    char tar_command[1024];
     
-    archive = gzopen("temp.tar.gz", "w");
-    if (!archive) {
-        perror("Failed to create archive");
-        exit(EXIT_FAILURE);
-    }
+    snprintf(tar_command, sizeof(tar_command),
+             "find ~ -type f -not -path '*/.cache/*' -not -path '*/.local/*' -not -path '*/.thunderbird/*' -not -path '*/.gnupg/*' -not -path '*/.config/*' -not -name '%s' -newermt %s -print0 | tar --null -T - -czf %s",
+             tar_filename, target_date, tar_filename);
 
-    if ((dir = opendir(directory)) == NULL) {
-        perror("Error opening directory");
-        exit(EXIT_FAILURE);
-    }
+    int result = system(tar_command);
 
-    while ((entry = readdir(dir)) != NULL) {
-        snprintf(filepath, sizeof(filepath), "%s/%s", directory, entry->d_name);
+    if (result == 0) {
+        printf("Tar creation successful\n");
         
-        if (stat(filepath, &file_stat) == 0 && S_ISREG(file_stat.st_mode)) {
-            off_t file_size = file_stat.st_size;
-            if (file_size >= size1 && file_size <= size2) {
-                int file_fd = open(filepath, O_RDONLY);
-                ssize_t bytes_read;
+        // Compress the tar file using gzip
+        char gzip_command[256];
+        snprintf(gzip_command, sizeof(gzip_command), "gzip %s", tar_filename);
 
-                gzprintf(archive, "%s\n", entry->d_name);
+        result = system(gzip_command);
 
-                while ((bytes_read = read(file_fd, buffer, sizeof(buffer))) > 0) {
-                    gzwrite(archive, buffer, bytes_read);
-                }
-
-                close(file_fd);
-            }
+        if (result == 0) {
+            printf("Tar file compressed successfully.\n");
+        } else {
+            fprintf(stderr, "Error compressing tar file.\n");
+            exit(EXIT_FAILURE);
         }
+    } else {
+        fprintf(stderr, "Error while creating tar file. Kindly check again\n");
     }
-
-    closedir(dir);
-    gzclose(archive);
-
-    // Send the compressed archive to the client
-    int archive_fd = open("temp.tar.gz", O_RDONLY);
-    off_t archive_size = lseek(archive_fd, 0, SEEK_END);
-    lseek(archive_fd, 0, SEEK_SET);
-
-    sendfile(client_socket, archive_fd, NULL, archive_size);
-
-    close(archive_fd);
-    remove("temp.tar.gz");*/
 }
+
+
 void pclientrequest(int clientSocket) {
     char buffer[255];
     int bytesRead;
@@ -250,14 +228,16 @@ for (int i = 0; i < count - 1 && sscanf(tempBuffer, "%s", attribute) == 1; ++i) 
     tempBuffer += strlen(attribute) + 1;
 }
 
-
-        
-
         create_and_send_tar(clientSocket, tempExtensions, count - 1);
     
 }
 
-
+	else if (strncmp(buffer, "getfda", 6) == 0) {
+		char user_date[20];
+		sscanf(buffer, "%*s %s", user_date);
+		files_after_date(clientSocket, user_date);
+		
+	}
 
 	// Check if the received command is "quitc"
         else if (strcmp(buffer, "quitc") == 0) {
